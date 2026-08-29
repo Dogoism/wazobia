@@ -35,6 +35,31 @@ export function foldForSearch(input: string): string {
     .trim();
 }
 
+/**
+ * Dice coefficient over character bigrams — a cheap stand-in for the
+ * pg_trgm similarity the Supabase search RPC uses, so near-misses like
+ * "e kaaro" → "Ẹ káàárọ̀" (folded "e kaaaro") behave the same in both
+ * backends.
+ */
+function bigramSimilarity(a: string, b: string): number {
+  if (a.length < 2 || b.length < 2) return 0;
+  const bigrams = new Map<string, number>();
+  for (let i = 0; i < a.length - 1; i++) {
+    const gram = a.slice(i, i + 2);
+    bigrams.set(gram, (bigrams.get(gram) ?? 0) + 1);
+  }
+  let shared = 0;
+  for (let i = 0; i < b.length - 1; i++) {
+    const gram = b.slice(i, i + 2);
+    const count = bigrams.get(gram) ?? 0;
+    if (count > 0) {
+      shared++;
+      bigrams.set(gram, count - 1);
+    }
+  }
+  return (2 * shared) / (a.length - 1 + (b.length - 1));
+}
+
 function scoreText(query: string, candidate: string): number {
   const q = foldForSearch(query);
   const c = foldForSearch(candidate);
@@ -47,6 +72,8 @@ function scoreText(query: string, candidate: string): number {
   const matched = qTokens.filter((t) => t.length > 1 && c.includes(t));
   if (matched.length === qTokens.length && qTokens.length > 1) return 45;
   if (matched.length > 0) return Math.min(35, matched.length * 12);
+  const similarity = bigramSimilarity(q, c);
+  if (similarity >= 0.5) return Math.round(similarity * 50);
   return 0;
 }
 

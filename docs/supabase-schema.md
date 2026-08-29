@@ -1,10 +1,41 @@
-# Proposed Supabase schema (not yet implemented)
+# Supabase schema
 
-Status: **proposal**. Per project instructions, the backend is not wired up
-until this design is approved. The draft SQL lives in
-`supabase/migrations/0001_initial_schema.sql`; nothing in the app reads from
-Supabase yet — the typed mock data in `lib/` mirrors this schema field for
-field.
+Status: **implemented and locally validated**. The schema lives in
+`supabase/migrations/0001_initial_schema.sql`, the generated content seed in
+`0002_seed_content.sql` (regenerate with `npm run seed:generate`), and the
+functional RLS/trigger test suite in `supabase/tests/` — see
+`docs/security-review.md` for the review results. The app reads Supabase
+whenever `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are
+set (see `lib/data/provider.ts`) and falls back to the typed mock data
+otherwise, so local development needs no Supabase project.
+
+## Deploying the schema
+
+```sh
+npx supabase init                 # once; creates supabase/config.toml
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push              # applies 0001 + 0002 in order
+```
+
+Then set the two env vars (locally in `.env.local`, and in Vercel project
+settings). Reviewer accounts are granted by an operator:
+`update contributors set is_reviewer = true where user_id = '<auth uuid>';`
+via the SQL editor — API callers can never set this flag.
+
+## Changes made while implementing the approved proposal
+
+- `language_variants.id` is a **text slug** (`'ha-kano'`), not a uuid — the
+  frontend ships the same reference data as constants, and shared natural
+  keys keep them in lockstep.
+- `contributors` is **decoupled from `auth.users`** (`user_id` nullable
+  unique FK) so editorial seed rows and labeled AI-suggestion accounts can
+  exist without logins; `current_contributor_id()` bridges JWT → profile,
+  and `handle_new_user` auto-creates profiles.
+- Added `search_fold()` (case + diacritics + punctuation folding, matching
+  only) and the `search_yarn(q)` RPC; added `position` columns for curated
+  display order; votes are readable only by their owner.
+- Seeded `votes_count` is 0 — the mock numbers are illustrative and would
+  be dishonest as real agreement counts.
 
 ## Design decisions
 
@@ -76,24 +107,22 @@ field.
 
 ## Row Level Security (summary)
 
-- **Read**: `languages`, `language_variants`, `concepts`, `examples`,
-  `sources`, `expression_sources` — public. `expressions` and `audio_assets`
-  — public for every status *except nothing*: the product displays unverified
-  content honestly labeled, so all rows are readable. ⚠️ If the team would
-  rather hide `pending` rows from anonymous readers until first review, flip
-  the one commented line in the policy — the minimum bar from the brief
-  ("public users can read verified content") is met either way.
-- **Insert**: authenticated users only; `contributor_id` must equal
-  `auth.uid()`; `verification_status` is forced to `'pending'`
-  (`'ai_suggestion'` may only be inserted by the service role, which is the
-  only path AI-generated rows enter by).
+- **Read**: reference and content tables are public — the product displays
+  unverified content honestly labeled, so all statuses are readable. ⚠️ To
+  hide `pending` rows from anonymous readers instead, flip the commented
+  line on the expressions policy — the minimum bar from the brief ("public
+  users can read verified content") is met either way. Individual `votes`
+  rows are visible only to their owner.
+- **Insert**: authenticated users only; `contributor_id` must be the
+  caller's own contributor profile; `verification_status` is forced to
+  `'pending'` (`'ai_suggestion'` rows enter only via the service role).
 - **Update/Delete**: contributors may edit their own still-`pending` rows;
-  every status change goes through `verifications` (reviewers only, never on
-  their own rows — enforced by trigger, not only by policy).
-- **Votes**: authenticated; one row per (expression, voter); voters can
-  remove their own vote.
-- **Service-role key** stays server-side only (Route Handlers / Server
-  Actions); the browser gets the anon key and RLS does the enforcement.
-- Before the backend is called done: run a policy review pass — attempt every
-  forbidden action (self-verification, status escalation on insert, editing
-  another user's row, anonymous writes) against a staging project.
+  every status change goes through `verifications` (reviewers only, never
+  on their own rows — enforced by trigger, not only by policy).
+- **Votes**: one row per (expression, voter); voters read/remove their own.
+- **Service-role key** is not used by the app at all; the browser gets the
+  anon key and RLS does the enforcement.
+- The full review — method, per-property results, issues found and fixed,
+  and deliberate decisions — is in `docs/security-review.md`. Re-run
+  `supabase/tests/policy-tests.sql` against a staging project before
+  production launch.

@@ -15,9 +15,12 @@ translation.
 
 ## Status
 
-Frontend MVP with typed mock data. The data model in `lib/types.ts` mirrors
-the proposed Supabase schema (`docs/supabase-schema.md`) so the mock layer can
-be swapped for the database without reshaping the product.
+Frontend MVP plus a validated Supabase backend. Without configuration the
+app runs on typed mock data; with `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` set (see `.env.example`), all reads come
+from Supabase through the same provider contract (`lib/data/provider.ts`).
+Schema, seed, and RLS test suite live in `supabase/`; deployment steps in
+`docs/supabase-schema.md`, security review in `docs/security-review.md`.
 
 - Side-by-side comparison screen (English | Hausa | Igbo | Yorùbá), swipeable
   cards on mobile
@@ -27,7 +30,11 @@ be swapped for the database without reshaping the product.
 - Verification statuses: Verified · Community · Pending · Disputed ·
   AI suggestion (AI content is never shown as verified)
 - Diacritic-insensitive search that resolves English phrases, paraphrased
-  intents, or existing Hausa/Igbo/Yorùbá expressions to concepts
+  intents, or existing Hausa/Igbo/Yorùbá expressions to concepts (Postgres
+  FTS + trigram via the `search_yarn` RPC when Supabase is configured)
+- Row Level Security enforcing: public read, pending-only contributor
+  submissions, reviewer-only verification, no self-verification — all
+  covered by an executable test suite (`supabase/tests/`)
 
 ## Development
 

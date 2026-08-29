@@ -64,11 +64,22 @@ export interface Source {
   isPlaceholder?: boolean;
 }
 
+export type ContributorKind = "seed" | "native-speaker" | "learner" | "ai";
+
 export interface Contributor {
   id: string;
   displayName: string;
   /** e.g. "seed" for editorial seed data, "native-speaker", "ai" */
-  kind: "seed" | "native-speaker" | "learner" | "ai";
+  kind: ContributorKind;
+}
+
+/**
+ * Denormalized attribution carried on each expression for display. The
+ * database keeps contributors normalized; this is the joined view.
+ */
+export interface ContributorRef {
+  displayName: string;
+  kind: ContributorKind;
 }
 
 /**
@@ -124,7 +135,7 @@ export interface Expression {
   /** Rough reading aid until audio exists; not IPA. */
   pronunciationNote?: string;
   audio: AudioAsset[];
-  contributorId: string;
+  contributor: ContributorRef;
   verificationStatus: VerificationStatus;
   sources: Source[];
   /** Community agreement count. */
@@ -156,4 +167,14 @@ export interface Concept {
 export interface ConceptWithExpressions {
   concept: Concept;
   expressions: Expression[];
+}
+
+/** One search hit as shown in the search results list. */
+export interface SearchResult {
+  slug: string;
+  title: string;
+  score: number;
+  /** Set when the match came from a specific expression. */
+  matchedText?: string;
+  matchedLanguageCode?: LanguageCode;
 }

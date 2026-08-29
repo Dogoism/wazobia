@@ -1,20 +1,59 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { searchConcepts, matchedLanguageLabel } from "@/lib/search";
+import type { SearchResult } from "@/lib/types";
 import { getLanguage } from "@/lib/data/languages";
+
+interface SearchState {
+  /** The query these results answer — stale responses never display. */
+  query: string;
+  results: SearchResult[];
+  failed: boolean;
+}
 
 /**
  * The "What do you want to say?" search. Resolves free text — an English
  * phrase, a paraphrased intent, or an existing Hausa/Igbo/Yorùbá
- * expression — to concepts.
+ * expression — to concepts via /api/search (mock or Supabase behind the
+ * same contract).
  */
-export default function SearchBox({ autoFocus }: { autoFocus?: boolean }) {
+export default function SearchBox() {
   const inputId = useId();
   const [query, setQuery] = useState("");
-  const hits = useMemo(() => searchConcepts(query).slice(0, 6), [query]);
-  const showResults = query.trim().length >= 2;
+  const [search, setSearch] = useState<SearchState | null>(null);
+
+  const trimmed = query.trim();
+
+  useEffect(() => {
+    if (trimmed.length < 2) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/search?q=${encodeURIComponent(trimmed)}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) throw new Error(`search failed: ${response.status}`);
+        const body = (await response.json()) as { results: SearchResult[] };
+        setSearch({ query: trimmed, results: body.results, failed: false });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        setSearch({ query: trimmed, results: [], failed: true });
+      }
+    }, 150);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [trimmed]);
+
+  const current = search !== null && search.query === trimmed ? search : null;
+  const showResults = trimmed.length >= 2 && current !== null;
+  const results = current?.results ?? [];
+  const failed = current?.failed ?? false;
 
   return (
     <div className="w-full">
@@ -24,7 +63,6 @@ export default function SearchBox({ autoFocus }: { autoFocus?: boolean }) {
       <input
         id={inputId}
         type="search"
-        autoFocus={autoFocus}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Try “long time no see” or “kwana biyu”…"
@@ -37,41 +75,44 @@ export default function SearchBox({ autoFocus }: { autoFocus?: boolean }) {
         {showResults && (
           <>
             <p className="sr-only">
-              {hits.length === 1
+              {results.length === 1
                 ? "1 matching concept"
-                : `${hits.length} matching concepts`}
+                : `${results.length} matching concepts`}
             </p>
-            {hits.length > 0 ? (
+            {results.length > 0 ? (
               <ul className="mt-3 divide-y divide-rule rounded-md border border-rule bg-paper-raised">
-                {hits.map((hit) => {
-                  const matched = matchedLanguageLabel(hit);
-                  return (
-                    <li key={hit.concept.id}>
-                      <Link
-                        href={`/concept/${hit.concept.slug}`}
-                        className="block px-4 py-3 hover:bg-accent-soft/40"
-                      >
-                        <span className="font-serif text-base text-ink">
-                          {hit.concept.title}
-                        </span>
-                        {matched && matched.code !== "en" && (
+                {results.map((result) => (
+                  <li key={result.slug}>
+                    <Link
+                      href={`/concept/${result.slug}`}
+                      className="block px-4 py-3 hover:bg-accent-soft/40"
+                    >
+                      <span className="font-serif text-base text-ink">
+                        {result.title}
+                      </span>
+                      {result.matchedText &&
+                        result.matchedLanguageCode &&
+                        result.matchedLanguageCode !== "en" && (
                           <span className="mt-0.5 block text-xs text-muted">
                             matches{" "}
-                            <span lang={matched.code} className="font-serif">
-                              {matched.text}
+                            <span
+                              lang={result.matchedLanguageCode}
+                              className="font-serif"
+                            >
+                              {result.matchedText}
                             </span>{" "}
-                            ({getLanguage(matched.code).name})
+                            ({getLanguage(result.matchedLanguageCode).name})
                           </span>
                         )}
-                      </Link>
-                    </li>
-                  );
-                })}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             ) : (
               <p className="mt-3 rounded-md border border-rule bg-paper-raised px-4 py-3 text-sm text-muted">
-                Nothing matches yet. The dictionary is young — try a
-                greeting, thanks, or sympathy.
+                {failed
+                  ? "Search is unavailable right now — please try again."
+                  : "Nothing matches yet. The dictionary is young — try a greeting, thanks, or sympathy."}
               </p>
             )}
           </>

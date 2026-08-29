@@ -3,18 +3,23 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ConceptComparison from "@/components/ConceptComparison";
 import { statusLabel } from "@/components/StatusBadge";
-import { getAllConcepts, getConceptBySlug } from "@/lib/data/concepts";
+import { getConceptBySlug, getConceptSlugs } from "@/lib/data/provider";
 import type { VerificationStatus } from "@/lib/types";
 
-export function generateStaticParams() {
-  return getAllConcepts().map((concept) => ({ slug: concept.slug }));
+// Content changes only when contributors submit or reviewers act;
+// re-render at most every 5 minutes when Supabase is the backend.
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  const slugs = await getConceptSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata(
   props: PageProps<"/concept/[slug]">,
 ): Promise<Metadata> {
   const { slug } = await props.params;
-  const data = getConceptBySlug(slug);
+  const data = await getConceptBySlug(slug);
   if (!data) return { title: "Concept not found" };
   return {
     title: data.concept.title,
@@ -40,7 +45,7 @@ const LEGEND_TEXT: Record<VerificationStatus, string> = {
 
 export default async function ConceptPage(props: PageProps<"/concept/[slug]">) {
   const { slug } = await props.params;
-  const data = getConceptBySlug(slug);
+  const data = await getConceptBySlug(slug);
   if (!data) notFound();
 
   return (

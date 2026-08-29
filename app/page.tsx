@@ -1,11 +1,15 @@
 import Link from "next/link";
 import SearchBox from "@/components/SearchBox";
-import { getAllConcepts, getExpressionsForConcept } from "@/lib/data/concepts";
+import { getConceptsWithExpressions } from "@/lib/data/provider";
 import { LANGUAGE_ORDER, getLanguage } from "@/lib/data/languages";
 
-export default function HomePage() {
-  const concepts = getAllConcepts();
-  const categories = [...new Set(concepts.map((c) => c.category))];
+// Content changes only when contributors submit or reviewers act;
+// re-render at most every 5 minutes when Supabase is the backend.
+export const revalidate = 300;
+
+export default async function HomePage() {
+  const entries = await getConceptsWithExpressions();
+  const categories = [...new Set(entries.map((e) => e.concept.category))];
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
@@ -28,13 +32,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section aria-labelledby="browse" id="browse" className="pb-8 pt-6">
+      <section aria-labelledby="browse-heading" id="browse" className="pb-8 pt-6">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule-strong pb-3">
           <h2 id="browse-heading" className="font-serif text-2xl font-semibold">
             Browse concepts
           </h2>
           <p className="text-sm text-muted">
-            {concepts.length} concepts · 4 languages
+            {entries.length} concepts · 4 languages
           </p>
         </div>
 
@@ -42,10 +46,9 @@ export default function HomePage() {
           <div key={category} className="mt-8">
             <h3 className="label-caps">{category}</h3>
             <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {concepts
-                .filter((c) => c.category === category)
-                .map((concept, index) => {
-                  const expressions = getExpressionsForConcept(concept.id);
+              {entries
+                .filter((entry) => entry.concept.category === category)
+                .map(({ concept, expressions }, index) => {
                   const coveredLanguages = LANGUAGE_ORDER.filter((code) =>
                     expressions.some((e) => e.languageCode === code),
                   );
