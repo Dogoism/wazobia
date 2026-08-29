@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+/*
+ * YARN commits to a single editorial "paper" look — warm cream ground,
+ * near-black ink, hairline rules — rather than a light/dark pair.
+ */
+:root {
+  color-scheme: light;
+
+  --paper: #faf6ef;
+  --paper-raised: #fffdf8;
+  --ink: #211d16;
+  --ink-soft: #4c453a;
+  --muted: #6e6659;
+  --rule: #e4dccb;
+  --rule-strong: #cfc5ae;
+  --accent: #9c3d1e;
+  --accent-soft: #f3e4dc;
+
+  --verified: #2c6a4d;
+  --verified-bg: #e4efe7;
+  --community: #35618e;
+  --community-bg: #e3ebf4;
+  --pending: #85691c;
+  --pending-bg: #f4ecd7;
+  --disputed: #a03a20;
+  --disputed-bg: #f6e3dc;
+  --ai: #665a8c;
+  --ai-bg: #e9e5f2;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-noto-serif), "Noto Serif", Georgia, "Times New Roman",
+    serif;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Small-caps section labels used throughout the entry layout. */
+.label-caps {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+a,
+button,
+select,
+input,
+summary {
+  outline-color: var(--accent);
+}
+
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Hide horizontal scrollbar chrome on the mobile card scroller while
+   keeping it scrollable and focusable. */
+.card-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
