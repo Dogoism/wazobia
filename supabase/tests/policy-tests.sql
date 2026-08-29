@@ -183,6 +183,32 @@ do $$ begin
   end;
 end $$;
 
+-- votes_count is system-maintained: forged values are neutralized on
+-- insert and preserved across owner updates.
+insert into expressions (id, concept_id, language_code, variant_id, text,
+  natural_meaning, contributor_id, votes_count)
+values ('99999999-0000-4000-8000-000000000003', :'concept_longtime', 'ha',
+  'ha-standard', 'forged votes test', 'test', :'amina_cid', 9999);
+
+do $$ begin
+  if (select votes_count from expressions
+      where id = '99999999-0000-4000-8000-000000000003') <> 0 then
+    raise exception 'TEST FAIL: forged votes_count on insert was stored';
+  end if;
+  raise notice 'PASS: forged votes_count on insert reset to 0';
+end $$;
+
+update expressions set votes_count = 5000
+where id = '99999999-0000-4000-8000-000000000003';
+
+do $$ begin
+  if (select votes_count from expressions
+      where id = '99999999-0000-4000-8000-000000000003') <> 0 then
+    raise exception 'TEST FAIL: forged votes_count on update was stored';
+  end if;
+  raise notice 'PASS: votes_count preserved across owner update';
+end $$;
+
 -- Editing someone else's row silently matches zero rows.
 do $$
 declare n int;
@@ -301,6 +327,23 @@ do $$ begin
     raise exception 'TEST FAIL: dispute did not set status+note';
   end if;
   raise notice 'PASS: dispute sets status and dispute note';
+end $$;
+
+-- AI-origin content can never be verified — even by an unrelated
+-- reviewer. The human path is a native speaker resubmitting the phrase
+-- as their own contribution.
+do $$ begin
+  begin
+    insert into verifications (expression_id, reviewer_id, action)
+    values ((select id from expressions where text = 'Ọ dịla anya'),
+            (select id from contributors
+             where user_id = 'bbbbbbbb-0000-4000-8000-000000000002'),
+            'verify');
+    raise exception 'TEST FAIL: AI suggestion was verified';
+  exception when others then
+    if sqlerrm like 'TEST FAIL%' then raise; end if;
+    raise notice 'PASS: AI-origin content cannot be verified (%)', sqlstate;
+  end;
 end $$;
 
 -- Reviewer submits their own expression, then tries to self-verify.

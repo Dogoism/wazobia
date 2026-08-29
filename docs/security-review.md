@@ -9,7 +9,7 @@ with a faithful stand-in for the Supabase-managed schemas
 `storage.objects`, PostgREST-style `anon`/`authenticated` roles and
 grants). The functional suite in `supabase/tests/policy-tests.sql` then
 impersonated anonymous users, two authenticated contributors, and a
-reviewer. **All 24 checks pass.** Re-run locally with:
+reviewer. **All 27 checks pass.** Re-run locally with:
 
 ```sh
 initdb + pg_ctl start                          # any scratch Postgres 16
@@ -32,6 +32,8 @@ psql -U postgres -f supabase/tests/policy-tests.sql
 | Non-reviewers cannot write to `verifications` | PASS |
 | Reviewer verification/dispute flips the denormalized status via trigger | PASS |
 | **No self-verification**: a reviewer verifying their own row is refused at the trigger (defense in depth below the UI) | PASS |
+| **AI content can never become verified**: verifying an AI-origin expression is refused at the trigger even for an unrelated reviewer | PASS |
+| `votes_count` is system-maintained: a forged value on insert is reset to 0; owner updates preserve the stored value | PASS |
 | Self-promotion to reviewer is refused (trigger; only service role / operator SQL may set `is_reviewer`) | PASS |
 | One vote per contributor; vote insert/delete keeps `votes_count` in sync; vote rows visible only to their owner | PASS |
 | Variant must belong to the expression's language (trigger) | PASS |
@@ -53,6 +55,19 @@ psql -U postgres -f supabase/tests/policy-tests.sql
    against data using typographic ’ and stopword-heavy phrases fell out of
    FTS. Fixed with `search_fold()` (case + diacritics + punctuation) used
    only for matching, never for storage or display.
+4. **Forgeable `votes_count`** (reported by Codex review on PR #2): the
+   insert/update policies constrained attribution and status but not the
+   system-maintained vote counter, so a contributor could supply any
+   value. Fixed with the `protect_votes_count` trigger — API roles get 0
+   on insert and the stored value preserved on update; the sync trigger
+   (running as function owner) is unaffected.
+5. **Reviewers could verify AI-origin expressions** (reported by Codex
+   review on PR #2): only self-verification was blocked, so an unrelated
+   reviewer could flip an `ai_suggestion` row to verified, violating the
+   product invariant that AI-generated content is never shown as
+   verified. `apply_verification` now refuses `verify` on expressions
+   whose contributor is of kind `ai`; the human path is a native speaker
+   resubmitting the phrase as their own contribution.
 
 ## Deliberate decisions (revisit before scale)
 
@@ -73,8 +88,9 @@ psql -U postgres -f supabase/tests/policy-tests.sql
   column and review flow.
 - **AI suggestions enter only via the service role** (RLS forces API
   inserts to `pending`). The `apply_verification` trigger is the only path
-  that can ever mark anything `verified`, and it refuses self-review; the
-  UI additionally never renders `ai_suggestion` rows as verified.
+  that can ever mark anything `verified`, and it refuses both self-review
+  and any `verify` on AI-origin content; the UI additionally never renders
+  `ai_suggestion` rows as verified.
 
 ## Standing rules
 

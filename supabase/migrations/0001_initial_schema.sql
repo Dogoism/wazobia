@@ -289,16 +289,25 @@ as $$
 declare
   expr expressions%rowtype;
   is_rev boolean;
+  contrib_kind contributor_kind;
 begin
   select * into expr from expressions where id = new.expression_id;
   select is_reviewer into is_rev from contributors where id = new.reviewer_id;
+  select kind into contrib_kind from contributors
+    where id = expr.contributor_id;
 
   if not coalesce(is_rev, false) then
     raise exception 'only reviewers can record verifications';
   end if;
-  -- No one verifies their own contribution — including AI-backed accounts.
+  -- No one verifies their own contribution.
   if new.action = 'verify' and expr.contributor_id = new.reviewer_id then
     raise exception 'contributors cannot verify their own submissions';
+  end if;
+  -- AI-generated content must NEVER be marked verified (product invariant,
+  -- see AGENTS.md). The human path is a native speaker resubmitting the
+  -- phrase as their own contribution, which then goes through review.
+  if new.action = 'verify' and contrib_kind = 'ai' then
+    raise exception 'AI-suggested content cannot be verified — a native speaker must resubmit it as their own contribution';
   end if;
 
   update expressions set
@@ -345,6 +354,31 @@ end $$;
 create trigger votes_sync
   after insert or delete on votes
   for each row execute function public.sync_votes_count();
+
+-- votes_count is system-maintained (synced from the votes table by the
+-- trigger above, which runs as the function owner). API roles can neither
+-- seed nor edit it: an explicit value on insert is reset, and on update
+-- the stored value is preserved (so clients that echo the whole row back
+-- in a PATCH stay valid). Operator and service-role paths are unaffected.
+create or replace function public.protect_votes_count()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user in ('anon', 'authenticated') then
+    if tg_op = 'INSERT' then
+      new.votes_count := 0;
+    else
+      new.votes_count := old.votes_count;
+    end if;
+  end if;
+  return new;
+end $$;
+
+create trigger expressions_protect_votes_count
+  before insert or update on expressions
+  for each row execute function public.protect_votes_count();
 
 -- ── Audio ───────────────────────────────────────────────────────────────────
 
