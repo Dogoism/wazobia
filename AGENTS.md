@@ -62,30 +62,48 @@ product constraints, not suggestions.
 ## Stack
 
 - Next.js (App Router) + TypeScript, Tailwind CSS v4 — deployed on Vercel.
-- Planned backend: Supabase (Postgres, Auth, RLS, Storage). The proposed
-  schema lives in `docs/supabase-schema.md` and
-  `supabase/migrations/0001_initial_schema.sql` (draft — not applied yet).
-  The typed mock data in `lib/` mirrors that schema; keep them in sync.
+- Backend: Supabase (Postgres, Auth, RLS, Storage). Schema:
+  `supabase/migrations/0001_initial_schema.sql`; content seed:
+  `0002_seed_content.sql` — **generated** from `lib/data/concepts.ts` via
+  `npm run seed:generate`, never edited by hand. Docs:
+  `docs/supabase-schema.md`, `docs/security-review.md`.
+- All reads go through `lib/data/provider.ts` (server-side only): Supabase
+  when `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are
+  set, typed mock data otherwise. Keep both implementations behaviorally
+  aligned (search included), and keep `lib/types.ts` in sync with the SQL
+  schema.
 - Audio is modeled as provider-agnostic `storageKey`s so storage can move from
   Supabase Storage to Cloudflare R2 without changing the product model.
 - Do not add dependencies without clear need. No component libraries; the
   editorial design is hand-rolled Tailwind.
 
-## Security (when the backend lands)
+## Security
 
-- Supabase Row Level Security on every table; anonymous users read only
-  verified/public content; authenticated contributors create `pending`
-  submissions; only reviewers/admins change verification status.
-- Never expose the service-role key to the client. Review all RLS policies
-  before calling backend work complete.
+- Supabase Row Level Security on every table; public read of labeled
+  content; authenticated contributors create `pending` submissions
+  attributed to themselves; status changes flow only through the
+  `verifications` log (reviewers only, never self-verification — enforced
+  by trigger). `is_reviewer` is operator-set only.
+- The service-role key is not used by the app; never expose it to the
+  client or commit it. The browser holds only the anon key.
+- Any change to policies, triggers, or security-definer functions must
+  update and re-run `supabase/tests/policy-tests.sql` (see workflow in
+  `docs/security-review.md`) and be reflected in that document.
 
 ## Commands
 
 ```sh
-npm run dev      # dev server
-npm run lint     # eslint (run `npx eslint .` to be explicit)
-npx tsc --noEmit # typecheck (run `npx next typegen` first on a fresh clone)
-npm run build    # production build — must pass before any commit
+npm run dev           # dev server (mock data unless Supabase env vars set)
+npm run lint          # eslint (run `npx eslint .` to be explicit)
+npx tsc --noEmit      # typecheck (run `npx next typegen` first on a fresh clone)
+npm run build         # production build — must pass before any commit
+npm run seed:generate # regenerate 0002_seed_content.sql after editing seed data
+
+# RLS/trigger tests against a scratch Postgres 16 (see docs/security-review.md):
+psql -U postgres -f supabase/tests/local-harness.sql
+psql -U postgres -d yarn -f supabase/migrations/0001_initial_schema.sql
+psql -U postgres -d yarn -f supabase/migrations/0002_seed_content.sql
+psql -U postgres -f supabase/tests/policy-tests.sql
 ```
 
 ## Definition of done

@@ -1,5 +1,4 @@
 import type { Expression } from "@/lib/types";
-import { getContributor } from "@/lib/data/concepts";
 import StatusBadge from "@/components/StatusBadge";
 
 const REGISTER_LABEL: Record<Expression["register"], string> = {
@@ -19,8 +18,6 @@ export default function ExpressionEntry({
 }: {
   expression: Expression;
 }) {
-  const contributor = getContributor(expression.contributorId);
-
   return (
     <article className="border-t border-rule pt-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
@@ -112,7 +109,7 @@ export default function ExpressionEntry({
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
         <span title="Community agreement">▲ {expression.votes}</span>
         <span aria-hidden="true">·</span>
-        <span>{contributor?.displayName ?? "Unknown contributor"}</span>
+        <span>{expression.contributor.displayName}</span>
         <span aria-hidden="true">·</span>
         {expression.audio.length > 0 ? (
           <span>Audio available</span>
